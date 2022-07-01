@@ -6,7 +6,7 @@ This repository contains the code for the following:
 
 This implementation can be deployed using the `deploy.js` script. It has an additional function located at the bottom of the file called `readMessage` that returns a hardcoded string.
 
-## Contracts
+**Contracts**
 
 -   AqueductToken.sol
 -   SuperToken.sol
@@ -15,7 +15,7 @@ This implementation can be deployed using the `deploy.js` script. It has an addi
 
 This implementation was taken from the [following guide](https://medium.com/@jtriley15/custom-super-tokens-6cdeffd6c923). You can test it out by adding the contracts to Remix and following the instructions.
 
-## Contracts
+**Contracts**
 
 -   SuperJuicyToken.sol
 -   SuperTokenBase.sol
