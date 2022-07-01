@@ -1,0 +1,24 @@
+require("@nomiclabs/hardhat-waffle");
+require("dotenv").config();
+
+module.exports = {
+    solidity: {
+        version: "0.8.14",
+        settings: {
+            optimizer: {
+                enabled: true,
+                runs: 200,
+            },
+        },
+    },
+    networks: {
+        mumbai: {
+            url: process.env.ALCHEMY_KEY,
+            accounts: [process.env.PRIVATE_KEY],
+        },
+        rinkeby: {
+            url: process.env.RINKEBY_ALCHEMY_KEY,
+            accounts: [process.env.PRIVATE_KEY],
+        },
+    },
+};
