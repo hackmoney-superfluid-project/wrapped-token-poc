@@ -1,6 +1,8 @@
 const hre = require("hardhat");
+require("dotenv").config();
 
 const SUPERFLUID_HOST = "0xeD5B5b32110c3Ded02a07c8b8e97513FAfb883B6";
+const DAI_ADDRESS = "0xc7AD46e0b8a400Bb3C915120d284AafbA8fc4735";
 
 const main = async () => {
     const AqueductToken = await hre.ethers.getContractFactory("AqueductToken");
@@ -8,6 +10,9 @@ const main = async () => {
     await aqueductToken.deployed();
 
     console.log("AqueductToken deployed to:", aqueductToken.address);
+
+    await aqueductToken.initialize(DAI_ADDRESS, 18, "Aqueduct Token", "AQUA");
+    console.log("AqueductToken initialized");
 
     const message = await aqueductToken.readMessage();
     console.log("Message: ", message);
