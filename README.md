@@ -19,7 +19,7 @@ Then open a separate terminal and enter:
 
 ## Custom native super token
 
-This implementation was taken from the [following guide](https://medium.com/@jtriley15/custom-super-tokens-6cdeffd6c923). You can test it out by adding the contracts to Remix and following the instructions.
+This implementation was taken from the [following guide](https://medium.com/@jtriley15/custom-super-tokens-6cdeffd6c923). You can test it out by adding the contracts to Remix and following the instructions. The contracts can be found in the `custom-token-guide-contracts` folder
 
 **Contracts**
 
