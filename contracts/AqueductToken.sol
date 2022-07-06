@@ -360,6 +360,21 @@ contract AqueductToken is UUPSProxiable, SuperfluidToken, ISuperToken {
         return availableBalance < 0 ? 0 : uint256(availableBalance);
     }
 
+    function twapBalanceOf(
+        address account,
+        uint256 mostRecentCumulative,
+        uint256 userEnterPoolCumulative
+    ) public view returns (uint256 balance) {
+        // formula: B=r*(S-S0)
+        // Where B is the balance and r is the flowrate
+        // Where S is most recent cumulative
+        // Where S0 is recorded cumulative from when user entered the pool
+
+        uint96 flowRate; // call getAgreementStateSlot here. We will need to decode the result
+
+        balance = uint256(uint96(flowRate)) * (mostRecentCumulative - userEnterPoolCumulative);
+    }
+
     function transfer(address recipient, uint256 amount)
         public override returns (bool)
     {
