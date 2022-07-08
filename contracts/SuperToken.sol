@@ -12,7 +12,7 @@ import {
     IERC777,
     TokenInfo
 } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
-import { ISuperfluidToken, SuperfluidToken } from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
+import { ISuperfluidToken } from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 
 import { ERC777Helper } from "@superfluid-finance/ethereum-contracts/contracts/libs/ERC777Helper.sol";
 
@@ -23,6 +23,9 @@ import { IERC777Recipient } from "@openzeppelin/contracts/token/ERC777/IERC777Re
 import { IERC777Sender } from "@openzeppelin/contracts/token/ERC777/IERC777Sender.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
+import { CustomSuperfluidToken } from './CustomSuperfluidToken.sol';
+
+import "./IAqueductHost.sol";
 
 /**
  * @title Superfluid's super token implementation
@@ -31,7 +34,7 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
  */
 contract SuperToken is
     UUPSProxiable,
-    SuperfluidToken,
+    CustomSuperfluidToken,
     ISuperToken
 {
 
@@ -80,9 +83,10 @@ contract SuperToken is
     uint256 internal _reserve31;
 
     constructor(
-        ISuperfluid host
+        ISuperfluid host,
+        IAqueductHost aqueductHost
     )
-        SuperfluidToken(host)
+        CustomSuperfluidToken(host, aqueductHost)
         // solhint-disable-next-line no-empty-blocks
     {
     }
@@ -204,7 +208,7 @@ contract SuperToken is
     )
         private
     {
-        SuperfluidToken._move(from, to, amount.toInt256());
+        CustomSuperfluidToken._move(from, to, amount.toInt256());
 
         emit Sent(operator, from, to, amount, userData, operatorData);
         emit Transfer(from, to, amount);
@@ -239,7 +243,7 @@ contract SuperToken is
     {
         require(account != address(0), "SuperToken: mint to zero address");
 
-        SuperfluidToken._mint(account, amount);
+        CustomSuperfluidToken._mint(account, amount);
 
         _callTokensReceived(operator, address(0), account, amount, userData, operatorData, requireReceptionAck);
 
@@ -267,7 +271,7 @@ contract SuperToken is
 
         _callTokensToSend(operator, from, address(0), amount, userData, operatorData);
 
-        SuperfluidToken._burn(from, amount);
+        CustomSuperfluidToken._burn(from, amount);
 
         emit Burned(operator, from, amount, userData, operatorData);
         emit Transfer(from, address(0), amount);

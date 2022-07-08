@@ -11,11 +11,13 @@ import {
     IERC777,
     TokenInfo
 } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
-import { ISuperfluidToken, SuperfluidToken } from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
+import { ISuperfluidToken } from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 
 import "./SuperToken.sol";
+import "./IAqueductHost.sol";
+import { CustomSuperfluidToken } from './CustomSuperfluidToken.sol';
 
-contract AqueductToken is UUPSProxiable, SuperfluidToken, ISuperToken {
+contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
 
     using SafeMath for uint256;
     using SafeCast for uint256;
@@ -62,9 +64,10 @@ contract AqueductToken is UUPSProxiable, SuperfluidToken, ISuperToken {
     uint256 internal _reserve31;
 
     constructor(
-        ISuperfluid host
+        ISuperfluid host,
+        IAqueductHost aqueductHost
     )
-        SuperfluidToken(host)
+        CustomSuperfluidToken(host, aqueductHost)
         // solhint-disable-next-line no-empty-blocks
     {
     }
@@ -186,7 +189,7 @@ contract AqueductToken is UUPSProxiable, SuperfluidToken, ISuperToken {
     )
         private
     {
-        SuperfluidToken._move(from, to, amount.toInt256());
+        CustomSuperfluidToken._move(from, to, amount.toInt256());
 
         emit Sent(operator, from, to, amount, userData, operatorData);
         emit Transfer(from, to, amount);
@@ -221,7 +224,7 @@ contract AqueductToken is UUPSProxiable, SuperfluidToken, ISuperToken {
     {
         require(account != address(0), "SuperToken: mint to zero address");
 
-        SuperfluidToken._mint(account, amount);
+        CustomSuperfluidToken._mint(account, amount);
 
         _callTokensReceived(operator, address(0), account, amount, userData, operatorData, requireReceptionAck);
 
@@ -249,7 +252,7 @@ contract AqueductToken is UUPSProxiable, SuperfluidToken, ISuperToken {
 
         _callTokensToSend(operator, from, address(0), amount, userData, operatorData);
 
-        SuperfluidToken._burn(from, amount);
+        CustomSuperfluidToken._burn(from, amount);
 
         emit Burned(operator, from, amount, userData, operatorData);
         emit Transfer(from, address(0), amount);
@@ -358,21 +361,6 @@ contract AqueductToken is UUPSProxiable, SuperfluidToken, ISuperToken {
         // solhint-disable-next-line not-rely-on-time
         (int256 availableBalance, , ,) = super.realtimeBalanceOfNow(account);
         return availableBalance < 0 ? 0 : uint256(availableBalance);
-    }
-
-    function twapBalanceOf(
-        address account,
-        uint256 mostRecentCumulative,
-        uint256 userEnterPoolCumulative
-    ) public view returns (uint256 balance) {
-        // formula: B=r*(S-S0)
-        // Where B is the balance and r is the flowrate
-        // Where S is most recent cumulative
-        // Where S0 is recorded cumulative from when user entered the pool
-
-        uint96 flowRate; // call getAgreementStateSlot here. We will need to decode the result
-
-        balance = uint256(uint96(flowRate)) * (mostRecentCumulative - userEnterPoolCumulative);
     }
 
     function transfer(address recipient, uint256 amount)
