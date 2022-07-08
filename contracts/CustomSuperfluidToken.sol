@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: AGPLv3
 pragma solidity 0.8.14;
 
-import {
-    ISuperfluid,
-    ISuperAgreement,
-    ISuperfluidGovernance,
-    ISuperfluidToken,
-    SafeCast,
-    EventsEmitter,
-    FixedSizeData
-} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
+import {ISuperfluid, ISuperAgreement, ISuperfluidGovernance, ISuperfluidToken, SafeCast, EventsEmitter, FixedSizeData} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 
-import { IConstantFlowAgreementV1 } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
+import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import "./IAqueductHost.sol";
 
@@ -21,7 +13,6 @@ import "./IAqueductHost.sol";
  * @author Superfluid
  */
 abstract contract CustomSuperfluidToken is ISuperfluidToken {
-
     bytes32 private constant _REWARD_ADDRESS_CONFIG_KEY =
         keccak256("org.superfluid-finance.superfluid.rewardAddress");
 
@@ -29,7 +20,7 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
     using SafeCast for int256;
 
     /// @dev Superfluid contract
-    ISuperfluid immutable internal _host;
+    ISuperfluid internal immutable _host;
 
     /// @dev Active agreement bitmap
     mapping(address => uint256) internal _inactiveAgreementBitmap;
@@ -54,23 +45,21 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
     uint256 internal _reserve13;
 
     // TODO: check that it is ok to add this var here:
-    IAqueductHost immutable internal _aqueductHost;
+    IAqueductHost internal immutable _aqueductHost;
 
-    constructor(
-        ISuperfluid host,
-        IAqueductHost aqueductHost
-    ) {
+    constructor(ISuperfluid host, IAqueductHost aqueductHost) {
         _host = host;
         _aqueductHost = aqueductHost;
     }
 
     /// @dev ISuperfluidToken.getHost implementation
     function getHost()
-       external view
-       override(ISuperfluidToken)
-       returns(address host)
+        external
+        view
+        override(ISuperfluidToken)
+        returns (address host)
     {
-       return address(_host);
+        return address(_host);
     }
 
     /**************************************************************************
@@ -78,21 +67,23 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
      *************************************************************************/
 
     /// @dev ISuperfluidToken.realtimeBalanceOf implementation
-    function realtimeBalanceOf(
-       address account,
-       uint256 timestamp
-    )
-       public view override
-       returns (
-           int256 availableBalance,
-           uint256 deposit,
-           uint256 owedDeposit)
+    function realtimeBalanceOf(address account, uint256 timestamp)
+        public
+        view
+        override
+        returns (
+            int256 availableBalance,
+            uint256 deposit,
+            uint256 owedDeposit
+        )
     {
         availableBalance = _balances[account];
-        ISuperAgreement[] memory activeAgreements = getAccountActiveAgreements(account);
+        ISuperAgreement[] memory activeAgreements = getAccountActiveAgreements(
+            account
+        );
         for (uint256 i = 0; i < activeAgreements.length; i++) {
             // ignore regular CFA / IDA for now
-            // TODO: differentiate between pool streams and regular CFA - apply custom logic
+            // TODO: find better way to differentiate between pool streams and regular CFA - apply custom logic
             /*
             (
                 int256 agreementDynamicBalance,
@@ -105,25 +96,55 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                      );
             */
 
+            // init vars
+            int256 agreementDynamicBalance;
+            uint256 agreementDeposit;
+            uint256 agreementOwedDeposit;
+            int96 flowRate;
+
             // get stream from pool contract (params: token, sender, receiver)
             (
                 ,
-                int96 flowRate,
-                uint256 agreementDeposit,
-                uint256 agreementOwedDeposit
-            ) = IConstantFlowAgreementV1(address(activeAgreements[i])).getFlow(this, address(_aqueductHost), account);
-            uint256 cumulativeDelta = _aqueductHost.getUserCumulativeDelta(address(this), account, timestamp);
-            int256 agreementDynamicBalance = int256(flowRate) * int256(cumulativeDelta);
+                flowRate,
+                agreementDeposit,
+                agreementOwedDeposit
+            ) = IConstantFlowAgreementV1(address(activeAgreements[i])).getFlow(
+                this,
+                address(_aqueductHost),
+                account
+            );
+
+            // if flowRate is 0, assume regular CFA
+            if (flowRate == 0) {
+                (
+                    agreementDynamicBalance,
+                    agreementDeposit,
+                    agreementOwedDeposit
+                ) = activeAgreements[i].realtimeBalanceOf(
+                    this,
+                    account,
+                    timestamp
+                );
+            } else {
+                uint256 cumulativeDelta = _aqueductHost.getUserCumulativeDelta(
+                    address(this),
+                    account,
+                    timestamp
+                );
+                agreementDynamicBalance = int256(flowRate) * int256(cumulativeDelta);
+            }
 
             deposit = deposit + agreementDeposit;
             owedDeposit = owedDeposit + agreementOwedDeposit;
             // 1. Available Balance = Dynamic Balance - Max(0, Deposit - OwedDeposit)
             // 2. Deposit should not be shared between agreements
-            availableBalance = availableBalance
-                + agreementDynamicBalance
-                - (
-                    agreementDeposit > agreementOwedDeposit ?
-                    (agreementDeposit - agreementOwedDeposit) : 0
+            availableBalance =
+                availableBalance +
+                agreementDynamicBalance -
+                (
+                    agreementDeposit > agreementOwedDeposit
+                        ? (agreementDeposit - agreementOwedDeposit)
+                        : 0
                 ).toInt256();
         }
     }
@@ -141,102 +162,103 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
         uint96 flowRate; // call getAgreementStateSlot here. We will need to decode the result
 
-        balance = uint256(uint96(flowRate)) * (mostRecentCumulative - userEnterPoolCumulative);
+        balance =
+            uint256(uint96(flowRate)) *
+            (mostRecentCumulative - userEnterPoolCumulative);
     }
 
     /// @dev ISuperfluidToken.realtimeBalanceOfNow implementation
-    function realtimeBalanceOfNow(
-       address account
-    )
-        public view override
+    function realtimeBalanceOfNow(address account)
+        public
+        view
+        override
         returns (
             int256 availableBalance,
             uint256 deposit,
             uint256 owedDeposit,
-            uint256 timestamp)
+            uint256 timestamp
+        )
     {
         timestamp = _host.getNow();
-        (
-            availableBalance,
-            deposit,
-            owedDeposit
-        ) = realtimeBalanceOf(account, timestamp);
+        (availableBalance, deposit, owedDeposit) = realtimeBalanceOf(
+            account,
+            timestamp
+        );
     }
 
-    function isAccountCritical(
-        address account,
-        uint256 timestamp
-    )
-        public view override
-        returns(bool isCritical)
+    function isAccountCritical(address account, uint256 timestamp)
+        public
+        view
+        override
+        returns (bool isCritical)
     {
-        (int256 availableBalance,,) = realtimeBalanceOf(account, timestamp);
+        (int256 availableBalance, , ) = realtimeBalanceOf(account, timestamp);
         return availableBalance < 0;
     }
 
-    function isAccountCriticalNow(
-       address account
-    )
-        external view override
-       returns(bool isCritical)
+    function isAccountCriticalNow(address account)
+        external
+        view
+        override
+        returns (bool isCritical)
     {
         return isAccountCritical(account, _host.getNow());
     }
 
-    function isAccountSolvent(
-        address account,
-        uint256 timestamp
-    )
-        public view override
-        returns(bool isSolvent)
+    function isAccountSolvent(address account, uint256 timestamp)
+        public
+        view
+        override
+        returns (bool isSolvent)
     {
-        (int256 availableBalance, uint256 deposit, uint256 owedDeposit) =
-            realtimeBalanceOf(account, timestamp);
+        (
+            int256 availableBalance,
+            uint256 deposit,
+            uint256 owedDeposit
+        ) = realtimeBalanceOf(account, timestamp);
         // Available Balance = Realtime Balance - Max(0, Deposit - OwedDeposit)
-        int realtimeBalance = availableBalance
-            + (deposit > owedDeposit ? (deposit - owedDeposit) : 0).toInt256();
+        int256 realtimeBalance = availableBalance +
+            (deposit > owedDeposit ? (deposit - owedDeposit) : 0).toInt256();
         return realtimeBalance >= 0;
     }
 
-    function isAccountSolventNow(
-       address account
-    )
-       external view override
-       returns(bool isSolvent)
+    function isAccountSolventNow(address account)
+        external
+        view
+        override
+        returns (bool isSolvent)
     {
         return isAccountSolvent(account, _host.getNow());
     }
 
     /// @dev ISuperfluidToken.getAccountActiveAgreements implementation
     function getAccountActiveAgreements(address account)
-       public view override
-       returns(ISuperAgreement[] memory)
+        public
+        view
+        override
+        returns (ISuperAgreement[] memory)
     {
-       return _host.mapAgreementClasses(~_inactiveAgreementBitmap[account]);
+        return _host.mapAgreementClasses(~_inactiveAgreementBitmap[account]);
     }
 
     /**************************************************************************
      * Token implementation helpers
      *************************************************************************/
 
-    function _mint(
-        address account,
-        uint256 amount
-    )
-        internal
-    {
+    function _mint(address account, uint256 amount) internal {
         _balances[account] = _balances[account] + amount.toInt256();
         _totalSupply = _totalSupply + amount;
     }
 
-    function _burn(
-        address account,
-        uint256 amount
-    )
-        internal
-    {
-        (int256 availableBalance,,) = realtimeBalanceOf(account, _host.getNow());
-        require(availableBalance >= amount.toInt256(), "SuperfluidToken: burn amount exceeds balance");
+    function _burn(address account, uint256 amount) internal {
+        (int256 availableBalance, , ) = realtimeBalanceOf(
+            account,
+            _host.getNow()
+        );
+        require(
+            availableBalance >= amount.toInt256(),
+            "SuperfluidToken: burn amount exceeds balance"
+        );
         _balances[account] = _balances[account] - amount.toInt256();
         _totalSupply = _totalSupply - amount;
     }
@@ -245,18 +267,23 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
         address from,
         address to,
         int256 amount
-    )
-        internal
-    {
-        (int256 availableBalance,,) = realtimeBalanceOf(from, _host.getNow());
-        require(availableBalance >= amount, "SuperfluidToken: move amount exceeds balance");
+    ) internal {
+        (int256 availableBalance, , ) = realtimeBalanceOf(from, _host.getNow());
+        require(
+            availableBalance >= amount,
+            "SuperfluidToken: move amount exceeds balance"
+        );
         _balances[from] = _balances[from] - amount;
         _balances[to] = _balances[to] + amount;
     }
 
     function _getRewardAccount() internal view returns (address rewardAccount) {
         ISuperfluidGovernance gov = _host.getGovernance();
-        rewardAccount = gov.getConfigAsAddress(_host, this, _REWARD_ADDRESS_CONFIG_KEY);
+        rewardAccount = gov.getConfigAsAddress(
+            _host,
+            this,
+            _REWARD_ADDRESS_CONFIG_KEY
+        );
     }
 
     /**************************************************************************
@@ -264,15 +291,18 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
      *************************************************************************/
 
     /// @dev ISuperfluidToken.createAgreement implementation
-    function createAgreement(
-        bytes32 id,
-        bytes32[] calldata data
-    )
-        external override
+    function createAgreement(bytes32 id, bytes32[] calldata data)
+        external
+        override
     {
         address agreementClass = msg.sender;
-        bytes32 slot = keccak256(abi.encode("AgreementData", agreementClass, id));
-        require(!FixedSizeData.hasData(slot, data.length), "SuperfluidToken: agreement already created");
+        bytes32 slot = keccak256(
+            abi.encode("AgreementData", agreementClass, id)
+        );
+        require(
+            !FixedSizeData.hasData(slot, data.length),
+            "SuperfluidToken: agreement already created"
+        );
         FixedSizeData.storeData(slot, data);
         emit AgreementCreated(agreementClass, id, data);
     }
@@ -281,38 +311,40 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
     function getAgreementData(
         address agreementClass,
         bytes32 id,
-        uint dataLength
-    )
-        external view override
-        returns(bytes32[] memory data)
-    {
-        bytes32 slot = keccak256(abi.encode("AgreementData", agreementClass, id));
+        uint256 dataLength
+    ) external view override returns (bytes32[] memory data) {
+        bytes32 slot = keccak256(
+            abi.encode("AgreementData", agreementClass, id)
+        );
         data = FixedSizeData.loadData(slot, dataLength);
     }
 
     /// @dev ISuperfluidToken.updateAgreementData implementation
-    function updateAgreementData(
-        bytes32 id,
-        bytes32[] calldata data
-    )
-        external override
+    function updateAgreementData(bytes32 id, bytes32[] calldata data)
+        external
+        override
     {
         address agreementClass = msg.sender;
-        bytes32 slot = keccak256(abi.encode("AgreementData", agreementClass, id));
+        bytes32 slot = keccak256(
+            abi.encode("AgreementData", agreementClass, id)
+        );
         FixedSizeData.storeData(slot, data);
         emit AgreementUpdated(msg.sender, id, data);
     }
 
     /// @dev ISuperfluidToken.terminateAgreement implementation
-    function terminateAgreement(
-        bytes32 id,
-        uint dataLength
-    )
-        external override
+    function terminateAgreement(bytes32 id, uint256 dataLength)
+        external
+        override
     {
         address agreementClass = msg.sender;
-        bytes32 slot = keccak256(abi.encode("AgreementData", agreementClass, id));
-        require(FixedSizeData.hasData(slot,dataLength), "SuperfluidToken: agreement does not exist");
+        bytes32 slot = keccak256(
+            abi.encode("AgreementData", agreementClass, id)
+        );
+        require(
+            FixedSizeData.hasData(slot, dataLength),
+            "SuperfluidToken: agreement does not exist"
+        );
         FixedSizeData.eraseData(slot, dataLength);
         emit AgreementTerminated(msg.sender, id);
     }
@@ -322,10 +354,10 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
         address account,
         uint256 slotId,
         bytes32[] calldata slotData
-    )
-        external override
-    {
-        bytes32 slot = keccak256(abi.encode("AgreementState", msg.sender, account, slotId));
+    ) external override {
+        bytes32 slot = keccak256(
+            abi.encode("AgreementState", msg.sender, account, slotId)
+        );
         FixedSizeData.storeData(slot, slotData);
         emit AgreementStateUpdated(msg.sender, account, slotId);
     }
@@ -335,20 +367,18 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
         address agreementClass,
         address account,
         uint256 slotId,
-        uint dataLength
-    )
-        external override view
-        returns (bytes32[] memory slotData) {
-        bytes32 slot = keccak256(abi.encode("AgreementState", agreementClass, account, slotId));
+        uint256 dataLength
+    ) external view override returns (bytes32[] memory slotData) {
+        bytes32 slot = keccak256(
+            abi.encode("AgreementState", agreementClass, account, slotId)
+        );
         slotData = FixedSizeData.loadData(slot, dataLength);
     }
 
     /// @dev ISuperfluidToken.settleBalance implementation
-    function settleBalance(
-        address account,
-        int256 delta
-    )
-        external override
+    function settleBalance(address account, int256 delta)
+        external
+        override
         onlyAgreement
     {
         _balances[account] = _balances[account] + delta;
@@ -372,7 +402,9 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
             rewardAccount = liquidatorAccount;
         }
 
-        address rewardAmountReceiver = useDefaultRewardAccount ? rewardAccount : liquidatorAccount;
+        address rewardAmountReceiver = useDefaultRewardAccount
+            ? rewardAccount
+            : liquidatorAccount;
 
         if (targetAccountBalanceDelta <= 0) {
             // LIKELY BRANCH: target account pays penalty to rewarded account
@@ -380,17 +412,30 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
             _balances[rewardAmountReceiver] += rewardAmount.toInt256();
             _balances[targetAccount] += targetAccountBalanceDelta;
-            EventsEmitter.emitTransfer(targetAccount, rewardAmountReceiver, rewardAmount);
+            EventsEmitter.emitTransfer(
+                targetAccount,
+                rewardAmountReceiver,
+                rewardAmount
+            );
         } else {
             // LESS LIKELY BRANCH: target account is bailed out
             // NOTE: useDefaultRewardAccount being true is undefined behavior
             // because the default reward account isn't receiving the rewardAmount by default
             assert(!useDefaultRewardAccount);
-            _balances[rewardAccount] -= (rewardAmount.toInt256() + targetAccountBalanceDelta);
+            _balances[rewardAccount] -= (rewardAmount.toInt256() +
+                targetAccountBalanceDelta);
             _balances[liquidatorAccount] += rewardAmount.toInt256();
             _balances[targetAccount] += targetAccountBalanceDelta;
-            EventsEmitter.emitTransfer(rewardAccount, liquidatorAccount, rewardAmount);
-            EventsEmitter.emitTransfer(rewardAccount, targetAccount, uint256(targetAccountBalanceDelta));
+            EventsEmitter.emitTransfer(
+                rewardAccount,
+                liquidatorAccount,
+                rewardAmount
+            );
+            EventsEmitter.emitTransfer(
+                rewardAccount,
+                targetAccount,
+                uint256(targetAccountBalanceDelta)
+            );
         }
 
         emit AgreementLiquidatedV2(
@@ -406,19 +451,22 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
     }
 
     /**************************************************************************
-    * Modifiers
-    *************************************************************************/
+     * Modifiers
+     *************************************************************************/
 
     modifier onlyAgreement() {
         require(
             _host.isAgreementClassListed(ISuperAgreement(msg.sender)),
-            "SuperfluidToken: only listed agreeement");
+            "SuperfluidToken: only listed agreeement"
+        );
         _;
     }
 
     modifier onlyHost() {
-        require(address(_host) == msg.sender, "SuperfluidToken: Only host contract allowed");
+        require(
+            address(_host) == msg.sender,
+            "SuperfluidToken: Only host contract allowed"
+        );
         _;
     }
-
 }
