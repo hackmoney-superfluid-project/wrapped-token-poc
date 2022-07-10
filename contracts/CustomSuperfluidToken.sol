@@ -103,12 +103,22 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
             int96 flowRate;
 
             // get stream from pool contract (params: token, sender, receiver)
-            (
+            /*(
                 ,
                 flowRate,
                 agreementDeposit,
                 agreementOwedDeposit
             ) = IConstantFlowAgreementV1(address(activeAgreements[i])).getFlow(
+                this,
+                address(_aqueductHost),
+                account
+            );*/
+            (
+                ,
+                flowRate,
+                agreementDeposit,
+                agreementOwedDeposit
+            ) = IConstantFlowAgreementV1(address(_host.getAgreementClass(keccak256("org.superfluid-finance.agreements.ConstantFlowAgreement.v1")))).getFlow(
                 this,
                 address(_aqueductHost),
                 account
